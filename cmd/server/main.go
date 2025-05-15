@@ -10,35 +10,50 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/teresa-solution/api-gateway/internal/handler"
+	"github.com/teresa-solution/api-gateway/internal/middleware"
 )
 
 func main() {
-	// Konfigurasi logging
+	// Configure logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	// Parse flag command line
+	// Parse command line flags
 	var (
-		port = flag.Int("port", 8080, "Port HTTP server")
+		httpPort = flag.Int("http-port", 8080, "HTTP server port")
+		grpcAddr = flag.String("grpc-addr", "localhost:50051", "gRPC server address")
 	)
 	flag.Parse()
 
-	log.Info().Msgf("Starting API Gateway server on port %d", *port)
+	// Set up gRPC gateway
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	// Setup HTTP server
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", *port),
-		Handler:      setupRouter(),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+	mux := runtime.NewServeMux()
+	if err := handler.RegisterHandlers(ctx, mux, *grpcAddr); err != nil {
+		log.Fatal().Err(err).Msg("Failed to register handlers")
+	}
+
+	// Apply middleware
+	handlerWithAuth := middleware.AuthMiddleware(mux)
+	handlerWithRateLimit := middleware.RateLimitMiddleware(handlerWithAuth)
+
+	// Create HTTP server
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", *httpPort),
+		Handler: handlerWithRateLimit,
 	}
 
 	// Start server in goroutine
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal().Err(err).Msg("Failed to start server")
+		log.Info().Msgf("API Gateway listening on port %d", *httpPort)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal().Err(err).Msg("HTTP server failed")
 		}
 	}()
 
@@ -46,23 +61,13 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Info().Msg("Shutting down server...")
+	log.Info().Msg("Shutting down API Gateway...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal().Err(err).Msg("Server forced to shutdown")
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Error().Err(err).Msg("Server shutdown failed")
 	}
-
-	log.Info().Msg("Server exiting")
-}
-
-func setupRouter() http.Handler {
-	// Implementasi router akan ditambahkan nanti
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	})
-	return mux
+	log.Info().Msg("API Gateway exiting")
 }
