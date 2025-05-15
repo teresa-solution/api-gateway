@@ -31,14 +31,12 @@ func main() {
 	)
 	flag.Parse()
 
-	// Initialize metrics
 	monitoring.InitMetrics()
 
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Create ServeMux with custom options
 	mux := runtime.NewServeMux(
 		runtime.WithIncomingHeaderMatcher(func(key string) (string, bool) {
 			if strings.ToLower(key) == "x-tenant-subdomain" {
@@ -47,12 +45,10 @@ func main() {
 			return runtime.DefaultHeaderMatcher(key)
 		}),
 		runtime.WithMetadata(func(ctx context.Context, r *http.Request) metadata.MD {
-			// Initialize a new metadata map if none exists
 			md, _ := metadata.FromIncomingContext(ctx)
 			if md == nil {
 				md = metadata.MD{}
 			}
-			// Add or update the subdomain if present
 			if subdomain := r.Header.Get("X-Tenant-Subdomain"); subdomain != "" {
 				md.Set("x-tenant-subdomain", subdomain)
 			}
@@ -64,12 +60,10 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to register handlers")
 	}
 
-	// Apply middleware
 	handlerWithAuth := middleware.AuthMiddleware(mux)
 	handlerWithRateLimit := middleware.RateLimitMiddleware(handlerWithAuth)
 	handlerWithMetrics := middleware.MetricsMiddleware(handlerWithRateLimit)
 
-	// Create HTTP server with metrics endpoint
 	finalMux := http.NewServeMux()
 	finalMux.Handle("/", handlerWithMetrics)
 	finalMux.Handle("/metrics", promhttp.Handler())
@@ -80,9 +74,10 @@ func main() {
 	}
 
 	go func() {
-		log.Info().Msgf("API Gateway listening on port %d", *httpPort)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal().Err(err).Msg("HTTP server failed")
+		log.Info().Msgf("API Gateway listening on port %d (HTTPS)", *httpPort)
+		// Use ListenAndServeTLS for HTTPS
+		if err := server.ListenAndServeTLS("certs/cert.pem", "certs/key.pem"); err != nil && err != http.ErrServerClosed {
+			log.Fatal().Err(err).Msg("HTTPS server failed")
 		}
 	}()
 

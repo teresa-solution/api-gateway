@@ -9,6 +9,11 @@ all: server
 server:
 	go run cmd/server/main.go
 
+# Generate token
+.PHONY: token
+token:
+	go run cmd/generate_token/main.go
+
 # Run database migrations up
 .PHONY: migrate-up
 migrate-up:
@@ -33,6 +38,7 @@ clean:
 help:
 	@echo "Available commands:"
 	@echo "  make server      - Run the server"
+	@echo "  make token       - Generate token"
 	@echo "  make migrate-up  - Run database migrations up"
 	@echo "  make migrate-down- Run database migrations down"
 	@echo "  make run-all     - Run migrations up and then start the server"
