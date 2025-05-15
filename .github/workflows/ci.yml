@@ -21,7 +21,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
       
       - name: Verify dependencies
         run: go mod verify
@@ -42,11 +41,11 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
       
       - name: Run tests with coverage
         run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
       
+      # This step is optional - remove if you don't want coverage reporting
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
@@ -64,13 +63,12 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
       
       - name: Build
-        run: go build -v -ldflags="-X 'main.Version=$(git describe --tags --always)' -X 'main.BuildTime=$(date -u +'%Y-%m-%dT%H:%M:%SZ')'" ./...
+        run: go build -v -ldflags="-X 'main.Version=$(git describe --tags --always || echo dev)' -X 'main.BuildTime=$(date -u +'%Y-%m-%dT%H:%M:%SZ')'" ./...
       
       - name: Run vulnerability check
         uses: golang/govulncheck-action@v1
         with:
           go-version-input: ${{ env.GO_VERSION }}
-          package: ./...
+          go-package: ./...
