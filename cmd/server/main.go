@@ -11,45 +11,51 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/teresa-solution/api-gateway/internal/handler"
 	"github.com/teresa-solution/api-gateway/internal/middleware"
+	"github.com/teresa-solution/api-gateway/internal/monitoring"
 )
 
 func main() {
-	// Configure logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	// Parse command line flags
 	var (
 		httpPort = flag.Int("http-port", 8080, "HTTP server port")
-		grpcAddr = flag.String("grpc-addr", "localhost:50051", "gRPC server address")
+		grpcAddr = flag.String("grpc-addr", "127.0.0.1:50051", "gRPC server address") // Define grpcAddr
 	)
 	flag.Parse()
 
-	// Set up gRPC gateway
+	// Initialize metrics
+	monitoring.InitMetrics()
+
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	mux := runtime.NewServeMux()
-	if err := handler.RegisterHandlers(ctx, mux, *grpcAddr); err != nil {
+	if err := handler.RegisterHandlers(ctx, mux, *grpcAddr); err != nil { // Pass grpcAddr
 		log.Fatal().Err(err).Msg("Failed to register handlers")
 	}
 
 	// Apply middleware
 	handlerWithAuth := middleware.AuthMiddleware(mux)
 	handlerWithRateLimit := middleware.RateLimitMiddleware(handlerWithAuth)
+	handlerWithMetrics := middleware.MetricsMiddleware(handlerWithRateLimit)
 
-	// Create HTTP server
+	// Create HTTP server with metrics endpoint
+	finalMux := http.NewServeMux()
+	finalMux.Handle("/", handlerWithMetrics)
+	finalMux.Handle("/metrics", promhttp.Handler())
+
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *httpPort),
-		Handler: handlerWithRateLimit,
+		Handler: finalMux,
 	}
 
-	// Start server in goroutine
 	go func() {
 		log.Info().Msgf("API Gateway listening on port %d", *httpPort)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -57,7 +63,6 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
