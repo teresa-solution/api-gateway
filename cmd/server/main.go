@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/teresa-solution/api-gateway/internal/handler"
 	"github.com/teresa-solution/api-gateway/internal/middleware"
 	"github.com/teresa-solution/api-gateway/internal/monitoring"
+	"google.golang.org/grpc/metadata"
 )
 
 func main() {
@@ -25,7 +27,7 @@ func main() {
 
 	var (
 		httpPort = flag.Int("http-port", 8080, "HTTP server port")
-		grpcAddr = flag.String("grpc-addr", "127.0.0.1:50051", "gRPC server address") // Define grpcAddr
+		grpcAddr = flag.String("grpc-addr", "127.0.0.1:50051", "gRPC server address")
 	)
 	flag.Parse()
 
@@ -36,8 +38,29 @@ func main() {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	mux := runtime.NewServeMux()
-	if err := handler.RegisterHandlers(ctx, mux, *grpcAddr); err != nil { // Pass grpcAddr
+	// Create ServeMux with custom options
+	mux := runtime.NewServeMux(
+		runtime.WithIncomingHeaderMatcher(func(key string) (string, bool) {
+			if strings.ToLower(key) == "x-tenant-subdomain" {
+				return key, true
+			}
+			return runtime.DefaultHeaderMatcher(key)
+		}),
+		runtime.WithMetadata(func(ctx context.Context, r *http.Request) metadata.MD {
+			// Initialize a new metadata map if none exists
+			md, _ := metadata.FromIncomingContext(ctx)
+			if md == nil {
+				md = metadata.MD{}
+			}
+			// Add or update the subdomain if present
+			if subdomain := r.Header.Get("X-Tenant-Subdomain"); subdomain != "" {
+				md.Set("x-tenant-subdomain", subdomain)
+			}
+			return md
+		}),
+	)
+
+	if err := handler.RegisterHandlers(ctx, mux, *grpcAddr); err != nil {
 		log.Fatal().Err(err).Msg("Failed to register handlers")
 	}
 
