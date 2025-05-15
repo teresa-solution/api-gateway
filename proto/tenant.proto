@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package tenant.v1;
+
+option go_package = "github.com/teresa-solution/api-gateway/proto/gen;tenantpb";
+
+import "google/api/annotations.proto";
+
+service TenantService {
+  rpc CreateTenant (CreateTenantRequest) returns (CreateTenantResponse) {
+    option (google.api.http) = {
+      post: "/v1/tenants"
+      body: "*"
+    };
+  }
+  rpc GetTenant (GetTenantRequest) returns (GetTenantResponse) {
+    option (google.api.http) = {
+      get: "/v1/tenants/{id}"
+    };
+  }
+  rpc UpdateTenant (UpdateTenantRequest) returns (UpdateTenantResponse) {
+    option (google.api.http) = {
+      put: "/v1/tenants/{id}"
+      body: "*"
+    };
+  }
+  rpc DeleteTenant (DeleteTenantRequest) returns (DeleteTenantResponse) {
+    option (google.api.http) = {
+      delete: "/v1/tenants/{id}"
+    };
+  }
+}
+
+message Tenant {
+  string id = 1;
+  string name = 2;
+  string subdomain = 3;
+  string status = 4;
+  string created_at = 5;
+  string updated_at = 6;
+  string deleted_at = 7;
+}
+
+message CreateTenantRequest {
+  string name = 1;
+  string subdomain = 2;
+  string contact_email = 3;
+  string tier = 4;
+}
+
+message CreateTenantResponse {
+  Tenant tenant = 1;
+}
+
+message GetTenantRequest {
+  string id = 1;
+}
+
+message GetTenantResponse {
+  Tenant tenant = 1;
+}
+
+message UpdateTenantRequest {
+  string id = 1;
+  string name = 2;
+  string subdomain = 3;
+  string status = 4;
+}
+
+message UpdateTenantResponse {
+  Tenant tenant = 1;
+}
+
+message DeleteTenantRequest {
+  string id = 1;
+}
+
+message DeleteTenantResponse {
+  bool success = 1;
+}
