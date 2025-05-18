@@ -8,7 +8,7 @@
   <img src="https://via.placeholder.com/800x400?text=Teresa+API+Gateway" alt="Teresa API Gateway Logo" width="600" />
 </div>
 
-> A high-performance, secure, multi-tenant API Gateway service that provides authentication, rate limiting, metrics, and proxying capabilities for backend gRPC services.
+> A high-performance, secure, multi-tenant API Gateway service that provides authentication, rate limiting, metrics, and proxying capabilities for backend gRPC services within the Teresa Solution ecosystem.
 
 ## 🌟 Features
 
@@ -21,9 +21,12 @@
 - **✅ Graceful Shutdown**: Ensures no requests are dropped during deployment
 - **💻 Developer-Friendly**: Easy to extend with new services and features
 
-## 🏗️ Architecture
+## 🧩 Teresa Ecosystem Integration
 
-The API Gateway serves as the entry point for all client requests, managing multiple concerns so your service implementation can focus on business logic:
+The API Gateway is the entry point for all Teresa Solution services:
+
+* **[Tenant Management Service](https://github.com/teresa-solution/tenant-management-service)**: API Gateway routes tenant provisioning and management requests to this service
+* **[Connection Pool Manager](https://github.com/teresa-solution/connection-pool-manager)**: Database connection pooling for multi-tenant applications
 
 <div align="center">
   <kbd>
@@ -33,9 +36,9 @@ The API Gateway serves as the entry point for all client requests, managing mult
 
 ```
 ┌─────────────┐       HTTPS       ┌───────────────────────────────────┐         gRPC        ┌─────────────────────┐
-│             │                   │           API Gateway             │                     │                     │
-│   Clients   │◄─────────────────►│  ┌─────────┐ ┌────────┐ ┌──────┐  │◄───────────────────►│  Backend Services   │
-│ (Web/Mobile)│      (8080)       │  │   TLS   │ │  Auth  │ │ Rate │  │       (50051)       │                     │
+│             │                   │           API Gateway             │                     │  Backend Services   │
+│   Clients   │◄─────────────────►│  ┌─────────┐ ┌────────┐ ┌──────┐  │◄───────────────────►│  - Tenant Mgmt     │
+│ (Web/Mobile)│      (8080)       │  │   TLS   │ │  Auth  │ │ Rate │  │       (50051)       │  - Connection Pool │
 └─────────────┘                   │  │Terminator│ │Middleware│ │Limit │  │                     └─────────────────────┘
                                  │  └─────────┘ └────────┘ └──────┘  │
                                  │         │          │         │      │
@@ -55,7 +58,9 @@ The API Gateway serves as the entry point for all client requests, managing mult
 
 - **Go 1.18+**
 - **TLS certificates** in the `certs/` directory
-- **Running gRPC backend service**
+- **Running gRPC backend services**:
+  - Tenant Management Service (port 50051)
+  - Connection Pool Manager (port 50052)
 
 ## 🚀 Quick Start
 
@@ -80,7 +85,8 @@ The API Gateway accepts the following command-line flags:
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--http-port` | HTTP server port | `8080` |
-| `--grpc-addr` | gRPC server address | `127.0.0.1:50051` |
+| `--tenant-svc-addr` | Tenant service address | `127.0.0.1:50051` |
+| `--pool-mgr-addr` | Connection pool manager address | `127.0.0.1:50052` |
 
 ### TLS Certificates
 
@@ -103,7 +109,7 @@ openssl req -x509 -newkey rsa:4096 -keyout certs/key.pem -out certs/cert.pem -da
 ./api-gateway
 
 # Start with custom configuration
-./api-gateway --http-port=9090 --grpc-addr=backend.example.com:50051
+./api-gateway --http-port=9090 --tenant-svc-addr=tenant-svc:50051 --pool-mgr-addr=pool-mgr:50052
 ```
 
 ## 🔍 Key Components
@@ -158,7 +164,8 @@ api-gateway/
 │   └── main.go                 # Application entry point
 ├── internal/
 │   ├── handler/                # Service handlers
-│   │   └── tenant.go           # Tenant service registration
+│   │   ├── tenant.go           # Tenant service registration
+│   │   └── pool.go             # Connection pool manager registration
 │   ├── middleware/             # HTTP middleware components
 │   │   ├── auth.go             # Authentication middleware
 │   │   ├── metrics.go          # Metrics collection middleware
@@ -167,6 +174,7 @@ api-gateway/
 │       └── metrics.go          # Prometheus metrics definition
 ├── proto/                      # Protocol buffer definitions
 │   ├── tenant.proto            # Tenant service definition
+│   ├── pool.proto              # Connection pool manager definition
 │   └── gen/                    # Generated gRPC code
 ├── certs/                      # TLS certificates
 ├── go.mod                      # Go module definition
@@ -197,38 +205,6 @@ To add a new service to the API Gateway:
        return err
    }
    ```
-
-### Graceful Shutdown
-
-The API Gateway handles graceful shutdown on SIGINT and SIGTERM signals with the following sequence:
-
-1. Stop accepting new connections
-2. Complete processing of in-flight requests (with 5-second timeout)
-3. Close all active connections
-4. Exit with status code 0
-
-## 📈 Performance
-
-Teresa API Gateway is designed for high performance:
-
-- Efficient request routing
-- Connection pooling to backend services
-- Minimal overhead for proxied requests
-- Optimized TLS handshake
-
-## 🧪 Testing
-
-Run the test suite with:
-
-```bash
-go test -v ./...
-```
-
-To test with race detection:
-
-```bash
-go test -race -v ./...
-```
 
 ## 📖 Documentation
 
